@@ -1,0 +1,93 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run typecheck
+      - run: npm run test:coverage
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --omit=dev
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          chmod -R a+rX .
+          zip -qr "$RUNNER_TEMP/api.zip" src node_modules host.json package.json
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy
+        env:
+          SCM: https://${{ vars.FUNCTION_APP_NAME }}.scm.azurewebsites.net
+          PACKAGE: ${{ runner.temp }}/api.zip
+        run: |
+          set -euo pipefail
+          token=$(az account get-access-token --resource https://appservice.azure.com --query accessToken --output tsv)
+          test -n "$token"
+          echo "::add-mask::$token"
+          curl --silent --show-error --fail-with-body --request POST "$SCM/api/publish?RemoteBuild=false&Deployer=github" --header "Authorization: Bearer $token" --header 'Content-Type: application/zip' --data-binary "@$PACKAGE"
+          accepted=false
+          for attempt in $(seq 1 90); do
+            sleep 2
+            code=$(curl --silent --output "$RUNNER_TEMP/deployment.json" --write-out '%{http_code}' --header "Authorization: Bearer $token" "$SCM/api/deployments/latest")
+            status=$(jq -r '.status // empty' "$RUNNER_TEMP/deployment.json" 2>/dev/null || true)
+            if [ "$status" = 4 ]; then exit 0; fi
+            if [ "$code" = 404 ] && [ "$accepted" = true ]; then exit 0; fi
+            if [ "$code" = 202 ]; then accepted=true; fi
+            case "$status" in
+              -1 | 3 | 5 | 6)
+                echo "::error::Deployment ended with status $status"
+                cat "$RUNNER_TEMP/deployment.json"
+                exit 1
+                ;;
+            esac
+          done
+          echo '::error::Deployment did not finish in three minutes'
+          exit 1
+
+      - name: Confirm the host loaded the function
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            functions=$(az functionapp function list --resource-group rg-portfolio-dev --name '${{ vars.FUNCTION_APP_NAME }}' --query '[].name' --output tsv || true)
+            if grep -q 'submit' <<< "$functions"; then exit 0; fi
+            sleep 20
+          done
+          echo '::error::The function app lists no submit function: the host did not load the package'
+          exit 1
