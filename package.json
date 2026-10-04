@@ -1,0 +1,26 @@
+{
+  "name": "service-api",
+  "private": true,
+  "type": "module",
+  "main": "src/function.ts",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "check": "biome ci",
+    "fix": "biome check --write",
+    "test": "node --test 'test/**/*.test.ts'",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.2",
+    "@azure/functions": "^4.16.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^24.19.1",
+    "typescript": "^7.0.2"
+  }
+}
