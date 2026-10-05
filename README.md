@@ -1,6 +1,6 @@
 # service-api
 
-Public HTTP API in front of the mastrocola.dev agent. It accepts a visitor's question, decides whether the question may run, hands it to the worker through a queue and answers the site's polling. It contains no agent code and owns all runtime state ([ADR-007](https://github.com/mastrocola-dev/docs/blob/main/adr/007-agent-runtime.md)); conventions shared with the other TypeScript repositories are recorded in [ADR-004](https://github.com/mastrocola-dev/docs/blob/main/adr/004-typescript-without-build.md).
+Public HTTP API in front of the mastrocola.dev agent, published as `api.mastrocola.dev`. It accepts a visitor's question, decides whether the question may run, hands it to the worker through a queue and answers the site's polling. It contains no agent code and owns all runtime state ([ADR-007](https://github.com/mastrocola-dev/docs/blob/main/adr/007-agent-runtime.md)); conventions shared with the other TypeScript repositories are recorded in [ADR-004](https://github.com/mastrocola-dev/docs/blob/main/adr/004-typescript-without-build.md). The whole path of a question is pictured in [agent-runtime](https://github.com/mastrocola-dev/docs/blob/main/architecture/agent-runtime.md).
 
 ## Contract
 
@@ -52,7 +52,7 @@ One table in Table Storage, partitioned by UTC day, behind the `JobStore` and `Q
 
 ## Trust
 
-The client address comes from `CF-Connecting-IP` and nothing else. That header is trustworthy only because the origin accepts connections from Cloudflare alone; a request without it is refused. The quota means nothing on an origin reachable directly.
+The client address comes from `CF-Connecting-IP` and nothing else. That header is trustworthy only because the origin accepts connections from Cloudflare alone; a request without it is refused. The quota means nothing on an origin reachable directly, so the restriction is part of this service's correctness, although it is declared in [infra](https://github.com/mastrocola-dev/infra#agent-specifics).
 
 ## Layout
 
